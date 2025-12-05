@@ -1,5 +1,4 @@
 import { Client } from 'pg';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -27,12 +26,18 @@ export default async function handler(req, res) {
 
     await client.end();
 
-    // Initialize Gemini AI
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-    // AI Prompt
-    const prompt = `You are an expert data analyst. Analyze this sales data and generate a comprehensive business report.
+    // Call Gemini API directly with fetch
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: `You are an expert data analyst. Analyze this sales data and generate a comprehensive business report.
 
 Sales Data (JSON):
 ${JSON.stringify(salesData, null, 2)}
@@ -45,11 +50,20 @@ Generate a report with:
 
 Format your response ONLY using these HTML tags: <h3>, <p>, <ul>, <li>, <strong>
 Do NOT include markdown, code blocks, or any other formatting.
-Start directly with <h3>Sales Analysis Report</h3>`;
+Start directly with <h3>Sales Analysis Report</h3>`
+            }]
+          }]
+        })
+      }
+    );
 
-    // Get AI response
-    const aiResult = await model.generateContent(prompt);
-    const report = aiResult.response.text();
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(JSON.stringify(data));
+    }
+
+    const report = data.candidates[0].content.parts[0].text;
 
     return res.status(200).json({ report });
 

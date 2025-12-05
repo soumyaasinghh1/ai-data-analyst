@@ -1,4 +1,63 @@
 import { Client } from 'pg';
+import formidable from 'formidable';
+import fs from 'fs';
+import csv from 'csv-parser';
+import xlsx from 'xlsx';
+
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+async function parseCSV(filePath) {
+  return new Promise((resolve, reject) => {
+    const results = [];
+    fs.createReadStream(filePath)
+      .pipe(csv())
+      .on('data', (data) => results.push(data))
+      .on('end', () => resolve(results))
+      .on('error', reject);
+  });
+}
+
+function parseExcel(filePath) {
+  const workbook = xlsx.readFile(filePath);
+  const sheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[sheetName];
+  return xlsx.utils.sheet_to_json(worksheet);
+}
+
+function calculateChartData(salesData) {
+  const productRevenue = {};
+  let totalRevenue = 0;
+  let totalUnits = 0;
+
+  salesData.forEach(row => {
+    const product = row.product_name || row['Product Name'] || row.product;
+    const quantity = parseInt(row.quantity || row.Quantity || 0);
+    const price = parseFloat(row.price || row.Price || 0);
+    const revenue = quantity * price;
+
+    if (product) {
+      productRevenue[product] = (productRevenue[product] || 0) + revenue;
+      totalRevenue += revenue;
+      totalUnits += quantity;
+    }
+  });
+
+  const products = Object.entries(productRevenue)
+    .map(([name, revenue]) => ({ name, revenue }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 10);
+
+  return {
+    products,
+    totalRevenue,
+    totalUnits,
+    uniqueProducts: products.length
+  };
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -6,27 +65,53 @@ export default async function handler(req, res) {
   }
 
   let client;
+  let salesData = [];
 
   try {
-    // Connect to Supabase PostgreSQL
-    client = new Client({
-      host: process.env.SUPABASE_HOST,
-      port: 6543,
-      database: process.env.SUPABASE_DB,
-      user: process.env.SUPABASE_USER,
-      password: process.env.SUPABASE_PASSWORD,
-      ssl: { rejectUnauthorized: false }
+    const form = formidable({
+      maxFileSize: 5 * 1024 * 1024, // 5MB
     });
 
-    await client.connect();
+    const [fields, files] = await form.parse(req);
+    const dataSource = fields.dataSource?.[0] || 'sample';
 
-    // Extract sales data
-    const result = await client.query('SELECT * FROM sales_data');
-    const salesData = result.rows;
+    // Get data from either sample DB or uploaded file
+    if (dataSource === 'sample') {
+      client = new Client({
+        host: process.env.SUPABASE_HOST,
+        port: 6543,
+        database: process.env.SUPABASE_DB,
+        user: process.env.SUPABASE_USER,
+        password: process.env.SUPABASE_PASSWORD,
+        ssl: { rejectUnauthorized: false }
+      });
 
-    await client.end();
+      await client.connect();
+      const result = await client.query('SELECT * FROM sales_data');
+      salesData = result.rows;
+      await client.end();
+    } else if (files.file) {
+      const uploadedFile = files.file[0];
+      const filePath = uploadedFile.filepath;
 
-    // Call Gemini API directly with fetch
+      if (uploadedFile.originalFilename.endsWith('.csv')) {
+        salesData = await parseCSV(filePath);
+      } else if (uploadedFile.originalFilename.match(/\.xlsx?$/)) {
+        salesData = parseExcel(filePath);
+      }
+
+      // Clean up uploaded file
+      fs.unlinkSync(filePath);
+    }
+
+    if (salesData.length === 0) {
+      throw new Error('No data found to analyze');
+    }
+
+    // Calculate chart data
+    const chartData = calculateChartData(salesData);
+
+    // Call Gemini API
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
@@ -37,20 +122,32 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           contents: [{
             parts: [{
-              text: `You are an expert data analyst. Analyze this sales data and generate a comprehensive business report.
+              text: `You are an expert data analyst. Analyze this sales data and generate a comprehensive business report WITH actionable recommendations.
 
 Sales Data (JSON):
-${JSON.stringify(salesData, null, 2)}
+${JSON.stringify(salesData.slice(0, 50), null, 2)}
 
-Generate a report with:
-1. Total Revenue Calculation
-2. Top 3 Performing Products (by revenue)
-3. Trend Analysis (patterns, seasonality, anomalies)
-4. Actionable Business Recommendations
+${salesData.length > 50 ? `Note: Showing first 50 of ${salesData.length} records for analysis.` : ''}
 
-Format your response ONLY using these HTML tags: <h3>, <p>, <ul>, <li>, <strong>
+Generate a detailed report with:
+1. **Executive Summary** - Key findings in 2-3 sentences
+2. **Total Revenue Analysis** - Calculate exact total revenue with breakdown
+3. **Top 5 Performing Products** - List by revenue with specific numbers
+4. **Sales Trends & Patterns** - Identify seasonality, peak periods, growth trends
+5. **Customer Insights** - Analysis of customer behavior patterns
+6. **Anomalies & Concerns** - Any unusual patterns or red flags
+7. **Actionable Recommendations** - At least 5 specific, prioritized action items to:
+   - Increase revenue
+   - Optimize inventory
+   - Improve customer retention
+   - Reduce costs
+   - Expand market share
+
+Format your response ONLY using these HTML tags: <h3>, <h4>, <p>, <ul>, <li>, <strong>, <em>
 Do NOT include markdown, code blocks, or any other formatting.
-Start directly with <h3>Sales Analysis Report</h3>`
+Start directly with <h3>Executive Summary</h3>
+
+Make recommendations specific, measurable, and prioritized by potential impact.`
             }]
           }]
         })
@@ -65,7 +162,7 @@ Start directly with <h3>Sales Analysis Report</h3>`
 
     const report = data.candidates[0].content.parts[0].text;
 
-    return res.status(200).json({ report });
+    return res.status(200).json({ report, chartData });
 
   } catch (error) {
     console.error('Error:', error);

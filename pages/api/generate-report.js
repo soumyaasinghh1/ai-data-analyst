@@ -29,7 +29,7 @@ export default async function handler(req, res) {
 
     // Initialize Gemini AI
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     // AI Prompt
     const prompt = `You are an expert data analyst. Analyze this sales data and generate a comprehensive business report.

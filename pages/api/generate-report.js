@@ -9,6 +9,7 @@ export default async function handler(req, res) {
   let client;
 
   try {
+    // Connect to Supabase PostgreSQL
     client = new Client({
       host: process.env.SUPABASE_HOST,
       port: 6543,
@@ -20,12 +21,17 @@ export default async function handler(req, res) {
 
     await client.connect();
 
+    // Extract sales data
     const result = await client.query('SELECT * FROM sales_data');
     const salesData = result.rows;
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+    await client.end();
 
+    // Initialize Gemini AI
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
+
+    // AI Prompt
     const prompt = `You are an expert data analyst. Analyze this sales data and generate a comprehensive business report.
 
 Sales Data (JSON):
@@ -41,10 +47,9 @@ Format your response ONLY using these HTML tags: <h3>, <p>, <ul>, <li>, <strong>
 Do NOT include markdown, code blocks, or any other formatting.
 Start directly with <h3>Sales Analysis Report</h3>`;
 
+    // Get AI response
     const aiResult = await model.generateContent(prompt);
     const report = aiResult.response.text();
-
-    await client.end();
 
     return res.status(200).json({ report });
 

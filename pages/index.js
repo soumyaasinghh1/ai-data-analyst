@@ -1,22 +1,52 @@
-import React, { useState } from 'react';
-import { BarChart3, TrendingUp, DollarSign, Loader2 } from 'lucide-react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { BarChart3, TrendingUp, DollarSign, Loader2, Upload, Download, Moon, Sun, MessageSquare, Sparkles, Users, Calendar, Filter, X, Zap, Activity, PieChart } from 'lucide-react';
+import { LineChart, Line, BarChart, Bar, PieChart as RechartsPie, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
+
+const COLORS = ['#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'];
 
 export default function AIDataAnalyst() {
   const [report, setReport] = useState('');
+  const [chartData, setChartData] = useState(null);
+  const [timeSeriesData, setTimeSeriesData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [dataSource, setDataSource] = useState('sample');
+  const [darkMode, setDarkMode] = useState(true);
+  const [showChat, setShowChat] = useState(false);
+  const [chatMessage, setChatMessage] = useState('');
+  const [chatHistory, setChatHistory] = useState([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [dateRange, setDateRange] = useState('all');
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      setUploadedFile(file);
+      setDataSource('uploaded');
+      setError('');
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    }
+  };
 
   const generateReport = async () => {
     setLoading(true);
     setError('');
-    setReport('');
 
     try {
+      const formData = new FormData();
+      formData.append('dataSource', dataSource);
+      if (uploadedFile) {
+        formData.append('file', uploadedFile);
+      }
+
       const response = await fetch('/api/generate-report', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        body: formData,
       });
 
       if (!response.ok) {
@@ -25,88 +55,96 @@ export default function AIDataAnalyst() {
 
       const data = await response.json();
       setReport(data.report);
+      setChartData(data.chartData);
+      setTimeSeriesData(data.timeSeriesData);
     } catch (err) {
-      setError(err.message || 'An error occurred while generating the report');
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      <div className="container mx-auto px-4 py-12">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
+      <div className="container mx-auto px-4 py-8">
         <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-purple-500 rounded-full mb-4">
-            <BarChart3 className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-4xl font-bold text-white mb-2">
-            Autonomous AI Data Analyst
-          </h1>
-          <p className="text-purple-200 text-lg">
-            Generate intelligent insights from your sales data instantly
-          </p>
+          <h1 className="text-5xl font-bold text-white mb-4">AI Data Analyst Pro</h1>
+          <p className="text-cyan-200 text-xl">Upload your data and get instant AI-powered insights</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white/10 backdrop-blur-lg rounded-lg p-6 border border-purple-500/20">
-            <div className="flex items-center gap-3 mb-2">
-              <DollarSign className="w-6 h-6 text-green-400" />
-              <h3 className="text-white font-semibold">Revenue Analysis</h3>
-            </div>
-            <p className="text-purple-200 text-sm">Automated calculation of total revenue and performance metrics</p>
-          </div>
+        {/* Upload */}
+        <div className="bg-slate-900/50 backdrop-blur-2xl rounded-3xl p-8 mb-8 border border-cyan-500/20">
+          <input
+            type="file"
+            onChange={handleFileUpload}
+            accept=".csv,.xlsx"
+            className="mb-4"
+          />
           
-          <div className="bg-white/10 backdrop-blur-lg rounded-lg p-6 border border-purple-500/20">
-            <div className="flex items-center gap-3 mb-2">
-              <TrendingUp className="w-6 h-6 text-blue-400" />
-              <h3 className="text-white font-semibold">Trend Detection</h3>
-            </div>
-            <p className="text-purple-200 text-sm">AI-powered pattern recognition and anomaly detection</p>
-          </div>
-          
-          <div className="bg-white/10 backdrop-blur-lg rounded-lg p-6 border border-purple-500/20">
-            <div className="flex items-center gap-3 mb-2">
-              <BarChart3 className="w-6 h-6 text-purple-400" />
-              <h3 className="text-white font-semibold">Product Insights</h3>
-            </div>
-            <p className="text-purple-200 text-sm">Identify top performers and optimization opportunities</p>
-          </div>
-        </div>
-
-        <div className="text-center mb-8">
           <button
             onClick={generateReport}
             disabled={loading}
-            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold py-4 px-8 rounded-lg shadow-lg transform transition hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+            className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold py-4 px-8 rounded-2xl"
           >
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Analyzing Data...
-              </span>
-            ) : (
-              'Generate AI Report'
-            )}
+            {loading ? 'Analyzing...' : 'Generate Report'}
           </button>
         </div>
 
-        {error && (
-          <div className="bg-red-500/10 border border-red-500 rounded-lg p-4 mb-8">
-            <p className="text-red-200">{error}</p>
-          </div>
-        )}
+        {error && <div className="text-red-400 mb-4">{error}</div>}
 
-        {report && (
-          <div className="bg-white/95 backdrop-blur-lg rounded-lg p-8 shadow-2xl border border-purple-500/20">
-            <div className="prose prose-lg max-w-none">
-              <div dangerouslySetInnerHTML={{ __html: report }} />
+        {/* Charts */}
+        {chartData && timeSeriesData && (
+          <div className="space-y-8">
+            <div className="bg-slate-900/50 backdrop-blur-2xl rounded-3xl p-8 border border-cyan-500/20">
+              <h3 className="text-2xl font-bold text-white mb-6">Revenue Trend</h3>
+              <ResponsiveContainer width="100%" height={400}>
+                <AreaChart data={timeSeriesData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="date" stroke="#94a3b8" />
+                  <YAxis stroke="#94a3b8" />
+                  <Tooltip />
+                  <Area type="monotone" dataKey="revenue" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.3} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="grid grid-cols-2 gap-8">
+              <div className="bg-slate-900/50 backdrop-blur-2xl rounded-3xl p-8 border border-cyan-500/20">
+                <h3 className="text-2xl font-bold text-white mb-6">Product Distribution</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <RechartsPie>
+                    <Pie data={chartData.products} dataKey="revenue" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
+                      {chartData.products.map((entry, index) => (
+                        <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </RechartsPie>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="bg-slate-900/50 backdrop-blur-2xl rounded-3xl p-8 border border-cyan-500/20">
+                <h3 className="text-2xl font-bold text-white mb-6">Top Products</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={chartData.products.slice(0, 5)}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                    <XAxis dataKey="name" stroke="#94a3b8" />
+                    <YAxis stroke="#94a3b8" />
+                    <Tooltip />
+                    <Bar dataKey="revenue" fill="#06b6d4" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
         )}
 
-        <div className="text-center mt-12 text-purple-200 text-sm">
-          <p>Powered by React + Vercel Functions + Supabase + Google Gemini</p>
-        </div>
+        {/* Report */}
+        {report && (
+          <div className="bg-white rounded-3xl p-8 mt-8">
+            <div dangerouslySetInnerHTML={{ __html: report }} />
+          </div>
+        )}
       </div>
     </div>
   );

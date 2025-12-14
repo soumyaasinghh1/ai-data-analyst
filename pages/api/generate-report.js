@@ -47,16 +47,36 @@ function calculateChartData(salesData) {
   });
 
   const products = Object.entries(productRevenue)
-    .map(([name, revenue]) => ({ name, revenue }))
+    .map(([name, revenue]) => ({ name, revenue: Math.round(revenue) }))
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 10);
 
   return {
     products,
-    totalRevenue,
+    totalRevenue: Math.round(totalRevenue),
     totalUnits,
     uniqueProducts: products.length
   };
+}
+
+function generateTimeSeriesData(salesData) {
+  const dateRevenue = {};
+
+  salesData.forEach(row => {
+    const date = row.sale_date || row['Sale Date'] || row.date;
+    const quantity = parseInt(row.quantity || row.Quantity || 0);
+    const price = parseFloat(row.price || row.Price || 0);
+    const revenue = quantity * price;
+
+    if (date) {
+      const dateStr = new Date(date).toISOString().split('T')[0];
+      dateRevenue[dateStr] = (dateRevenue[dateStr] || 0) + revenue;
+    }
+  });
+
+  return Object.entries(dateRevenue)
+    .map(([date, revenue]) => ({ date, revenue: Math.round(revenue) }))
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
 export default async function handler(req, res) {
@@ -69,13 +89,12 @@ export default async function handler(req, res) {
 
   try {
     const form = formidable({
-      maxFileSize: 5 * 1024 * 1024, // 5MB
+      maxFileSize: 5 * 1024 * 1024,
     });
 
     const [fields, files] = await form.parse(req);
     const dataSource = fields.dataSource?.[0] || 'sample';
 
-    // Get data from either sample DB or uploaded file
     if (dataSource === 'sample') {
       client = new Client({
         host: process.env.SUPABASE_HOST,
@@ -100,7 +119,6 @@ export default async function handler(req, res) {
         salesData = parseExcel(filePath);
       }
 
-      // Clean up uploaded file
       fs.unlinkSync(filePath);
     }
 
@@ -108,10 +126,9 @@ export default async function handler(req, res) {
       throw new Error('No data found to analyze');
     }
 
-    // Calculate chart data
     const chartData = calculateChartData(salesData);
+    const timeSeriesData = generateTimeSeriesData(salesData);
 
-    // Call Gemini API
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
@@ -122,32 +139,54 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           contents: [{
             parts: [{
-              text: `You are an expert data analyst. Analyze this sales data and generate a comprehensive business report WITH actionable recommendations.
+              text: `You are an expert data analyst. Analyze this sales data comprehensively.
 
-Sales Data (JSON):
-${JSON.stringify(salesData.slice(0, 50), null, 2)}
+Sales Data Summary:
+- Total Records: ${salesData.length}
+- Total Revenue: $${chartData.totalRevenue.toLocaleString()}
+- Total Units: ${chartData.totalUnits.toLocaleString()}
+- Unique Products: ${chartData.uniqueProducts}
 
-${salesData.length > 50 ? `Note: Showing first 50 of ${salesData.length} records for analysis.` : ''}
+Top Products:
+${chartData.products.slice(0, 5).map((p, i) => `${i+1}. ${p.name}: $${p.revenue.toLocaleString()}`).join('\n')}
 
-Generate a detailed report with:
-1. **Executive Summary** - Key findings in 2-3 sentences
-2. **Total Revenue Analysis** - Calculate exact total revenue with breakdown
-3. **Top 5 Performing Products** - List by revenue with specific numbers
-4. **Sales Trends & Patterns** - Identify seasonality, peak periods, growth trends
-5. **Customer Insights** - Analysis of customer behavior patterns
-6. **Anomalies & Concerns** - Any unusual patterns or red flags
-7. **Actionable Recommendations** - At least 5 specific, prioritized action items to:
-   - Increase revenue
-   - Optimize inventory
-   - Improve customer retention
-   - Reduce costs
-   - Expand market share
+Sample Records:
+${JSON.stringify(salesData.slice(0, 20), null, 2)}
 
-Format your response ONLY using these HTML tags: <h3>, <h4>, <p>, <ul>, <li>, <strong>, <em>
-Do NOT include markdown, code blocks, or any other formatting.
-Start directly with <h3>Executive Summary</h3>
+Generate a DETAILED executive report with:
 
-Make recommendations specific, measurable, and prioritized by potential impact.`
+<h3>📊 Executive Summary</h3>
+<p>2-3 sentence high-level overview of business performance</p>
+
+<h3>💰 Revenue Analysis</h3>
+<p>Deep dive into revenue streams, growth patterns, and key drivers</p>
+
+<h3>🏆 Top Performers</h3>
+<p>Analysis of best-selling products with specific metrics and insights</p>
+
+<h3>📈 Trends & Patterns</h3>
+<p>Identify seasonality, growth trends, anomalies, and market dynamics</p>
+
+<h3>👥 Customer Insights</h3>
+<p>Customer behavior patterns and purchasing trends</p>
+
+<h3>⚠️ Risk Assessment</h3>
+<p>Potential concerns, anomalies, or areas needing attention</p>
+
+<h3>🎯 Strategic Recommendations</h3>
+<ul>
+<li><strong>Priority 1:</strong> Specific action with expected impact</li>
+<li><strong>Priority 2:</strong> Specific action with expected impact</li>
+<li><strong>Priority 3:</strong> Specific action with expected impact</li>
+<li><strong>Priority 4:</strong> Specific action with expected impact</li>
+<li><strong>Priority 5:</strong> Specific action with expected impact</li>
+</ul>
+
+<h3>📊 Key Metrics Dashboard</h3>
+<p>Summary of critical KPIs and benchmarks</p>
+
+Format ONLY with HTML tags: <h3>, <h4>, <p>, <ul>, <li>, <strong>, <em>
+NO markdown, code blocks, or other formatting.`
             }]
           }]
         })
@@ -162,7 +201,7 @@ Make recommendations specific, measurable, and prioritized by potential impact.`
 
     const report = data.candidates[0].content.parts[0].text;
 
-    return res.status(200).json({ report, chartData });
+    return res.status(200).json({ report, chartData, timeSeriesData });
 
   } catch (error) {
     console.error('Error:', error);

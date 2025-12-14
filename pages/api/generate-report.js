@@ -139,7 +139,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           contents: [{
             parts: [{
-              text: `You are an expert data analyst. Analyze this sales data comprehensively.
+              text: `You are an expert data analyst. Analyze this sales data and generate a comprehensive business report.
 
 Sales Data Summary:
 - Total Records: ${salesData.length}
@@ -150,28 +150,25 @@ Sales Data Summary:
 Top Products:
 ${chartData.products.slice(0, 5).map((p, i) => `${i+1}. ${p.name}: $${p.revenue.toLocaleString()}`).join('\n')}
 
-Sample Records:
-${JSON.stringify(salesData.slice(0, 20), null, 2)}
+Sample Data:
+${JSON.stringify(salesData.slice(0, 10), null, 2)}
 
-Generate a DETAILED executive report with:
+Generate a detailed report with:
 
 <h3>📊 Executive Summary</h3>
 <p>2-3 sentence high-level overview of business performance</p>
 
 <h3>💰 Revenue Analysis</h3>
-<p>Deep dive into revenue streams, growth patterns, and key drivers</p>
+<p>Deep dive into revenue streams and growth patterns</p>
 
 <h3>🏆 Top Performers</h3>
-<p>Analysis of best-selling products with specific metrics and insights</p>
+<p>Analysis of best-selling products with specific metrics</p>
 
 <h3>📈 Trends & Patterns</h3>
-<p>Identify seasonality, growth trends, anomalies, and market dynamics</p>
-
-<h3>👥 Customer Insights</h3>
-<p>Customer behavior patterns and purchasing trends</p>
+<p>Identify seasonality, growth trends, and anomalies</p>
 
 <h3>⚠️ Risk Assessment</h3>
-<p>Potential concerns, anomalies, or areas needing attention</p>
+<p>Potential concerns or areas needing attention</p>
 
 <h3>🎯 Strategic Recommendations</h3>
 <ul>
@@ -182,10 +179,7 @@ Generate a DETAILED executive report with:
 <li><strong>Priority 5:</strong> Specific action with expected impact</li>
 </ul>
 
-<h3>📊 Key Metrics Dashboard</h3>
-<p>Summary of critical KPIs and benchmarks</p>
-
-Format ONLY with HTML tags: <h3>, <h4>, <p>, <ul>, <li>, <strong>, <em>
+Format ONLY with HTML tags: <h3>, <h4>, <p>, <ul>, <li>, <strong>
 NO markdown, code blocks, or other formatting.`
             }]
           }]
